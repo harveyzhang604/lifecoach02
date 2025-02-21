@@ -48,7 +48,8 @@ app.post('/chat', async (req, res) => {
                 messages: messages,
                 temperature: 0.7,
                 stream: true
-            })
+            }),
+            timeout: 90000 // 设置90秒超时
         });
 
         // 处理流式响应
