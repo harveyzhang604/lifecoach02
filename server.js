@@ -7,7 +7,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 // 启用CORS和JSON解析
 app.use(cors());
@@ -15,8 +15,8 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // DeepSeek API配置
-const API_KEY = '313817c2-3e84-4e6e-b053-877697cb950b';
-const API_URL = 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
+const API_KEY = process.env.DEEPSEEK_API_KEY;
+const API_URL = process.env.DEEPSEEK_API_URL || 'https://ark.cn-beijing.volces.com/api/v3/chat/completions';
 
 // 处理聊天请求
 app.post('/chat', async (req, res) => {
