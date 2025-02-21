@@ -60,15 +60,21 @@
         }
 
         // 处理AI响应
-        async function handleAIResponse(messages) {
+        async function handleAIResponse(messages, retryCount = 3) {
             try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 30000);
+
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ messages })
+                    body: JSON.stringify({ messages }),
+                    signal: controller.signal
                 });
+                
+                clearTimeout(timeout);
 
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -131,7 +137,13 @@
                 messageHistory.push({ role: 'assistant', content: aiResponse });
             } catch (error) {
                 console.error('请求出错:', error);
-                addMessage('抱歉，发生了错误，请稍后重试。', false);
+                if (retryCount > 0 && (error.name === 'AbortError' || !navigator.onLine || error.message.includes('Failed to fetch'))) {
+                    console.log(`重试请求，剩余重试次数: ${retryCount-1}`);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    return handleAIResponse(messages, retryCount - 1);
+                }
+                const errorMessage = error.name === 'AbortError' ? '请求超时，正在重试...' : '抱歉，发生了错误，请稍后重试。';
+                addMessage(errorMessage, false);
             }
         }
 

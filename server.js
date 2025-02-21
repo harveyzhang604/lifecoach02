@@ -36,8 +36,18 @@ app.post('/chat', async (req, res) => {
             });
         }
 
-        // 调用DeepSeek API
-        const response = await fetch(API_URL, {
+        // 设置请求超时时间
+        const controller = new AbortController();
+        const timeout = setTimeout(() => {
+            controller.abort();
+        }, 30000); // 30秒超时
+
+        // 调用DeepSeek API，添加重试逻辑
+        let retries = 3;
+        let response;
+        while (retries > 0) {
+            try {
+                response = await fetch(API_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -48,8 +58,24 @@ app.post('/chat', async (req, res) => {
                 messages: messages,
                 temperature: 0.7,
                 stream: true
-            })
+            }),
+            signal: controller.signal
         });
+                if (response.ok) break;
+                retries--;
+                if (retries > 0) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            } catch (error) {
+                if (error.name === 'AbortError') {
+                    throw new Error('请求超时，请稍后重试');
+                }
+                retries--;
+                if (retries === 0) throw error;
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+        clearTimeout(timeout);
 
         if (!response.ok) {
             throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
@@ -85,7 +111,8 @@ app.post('/chat', async (req, res) => {
         res.end();
     } catch (error) {
         console.error('处理请求时出错:', error);
-        res.status(500).json({ error: '服务器内部错误' });
+        const errorMessage = error.message === '请求超时，请稍后重试' ? error.message : '服务器内部错误，请稍后重试';
+        res.status(500).json({ error: errorMessage });
     }
 });
 
