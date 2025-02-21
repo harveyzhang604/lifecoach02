@@ -70,6 +70,10 @@
                     body: JSON.stringify({ messages })
                 });
 
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
 
@@ -82,27 +86,44 @@
                 chatMessages.appendChild(messageDiv);
 
                 let aiResponse = '';
+                let buffer = '';
 
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
 
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
 
                     for (const line of lines) {
-                        if (line.trim() === '' || line.trim() === 'data: [DONE]') continue;
+                        const trimmedLine = line.trim();
+                        if (!trimmedLine || trimmedLine === 'data: [DONE]') continue;
 
                         try {
-                            const jsonData = JSON.parse(line.replace('data: ', ''));
-                            if (jsonData.content) {
-                                aiResponse += jsonData.content;
+                            const jsonData = JSON.parse(trimmedLine.replace('data: ', ''));
+                            if (jsonData.choices?.[0]?.delta?.content) {
+                                const content = jsonData.choices[0].delta.content;
+                                aiResponse += content;
                                 contentDiv.textContent = aiResponse;
                                 chatMessages.scrollTop = chatMessages.scrollHeight;
                             }
                         } catch (e) {
-                            console.error('解析响应数据出错:', e);
+                            console.error('解析响应数据出错:', e, line);
                         }
+                    }
+                }
+
+                // 处理最后可能剩余的数据
+                if (buffer) {
+                    try {
+                        const jsonData = JSON.parse(buffer.replace('data: ', ''));
+                        if (jsonData.choices?.[0]?.delta?.content) {
+                            aiResponse += jsonData.choices[0].delta.content;
+                            contentDiv.textContent = aiResponse;
+                        }
+                    } catch (e) {
+                        console.error('解析最后的响应数据出错:', e);
                     }
                 }
 

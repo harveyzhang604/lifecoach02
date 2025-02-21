@@ -7,7 +7,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 3001;  // 修改默认端口为3001
 
 // 启用CORS和JSON解析
 app.use(cors());
@@ -48,28 +48,37 @@ app.post('/chat', async (req, res) => {
                 messages: messages,
                 temperature: 0.7,
                 stream: true
-            }),
-            timeout: 90000 // 设置90秒超时
+            })
         });
 
+        if (!response.ok) {
+            throw new Error(`API请求失败: ${response.status} ${response.statusText}`);
+        }
+
         // 处理流式响应
-        const text = await response.text();
-        const lines = text.split('\n');
-
-        for (const line of lines) {
-            if (line.trim() === '') continue;
-            if (line.trim() === 'data: [DONE]') {
-                res.write('data: [DONE]\n\n');
-                continue;
-            }
-
-            try {
-                const jsonData = JSON.parse(line.replace('data: ', ''));
-                if (jsonData.choices && jsonData.choices[0].delta.content) {
-                    res.write(`data: ${JSON.stringify(jsonData.choices[0].delta)}\n\n`);
+        for await (const chunk of response.body) {
+            const lines = chunk.toString().split('\n');
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine || trimmedLine === 'data: [DONE]') {
+                    if (trimmedLine === 'data: [DONE]') {
+                        res.write('data: [DONE]\n\n');
+                    }
+                    continue;
                 }
-            } catch (e) {
-                console.error('解析响应数据出错:', e);
+
+                if (line.startsWith('data: ')) {
+                    try {
+                        const jsonData = JSON.parse(line.substring(6));
+                        if (jsonData.choices?.[0]?.delta?.content) {
+                            const content = jsonData.choices[0].delta.content;
+                            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`);
+                        }
+                    } catch (e) {
+                        console.error('解析响应数据出错:', e, line);
+                        continue;
+                    }
+                }
             }
         }
 
