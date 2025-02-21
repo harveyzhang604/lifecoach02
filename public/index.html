@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Life Coach AI - 你的个人成长助手</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 页面容器 -->
+    <div class="container">
+        <!-- 顶部标题区域 -->
+        <header class="header">
+            <h1>Life Coach AI</h1>
+            <p>你的个人成长助手</p>
+        </header>
+
+        <!-- 中间对话区域 -->
+        <main class="chat-area">
+            <!-- 聊天记录显示区 -->
+            <div class="chat-messages" id="chatMessages">
+                <!-- 欢迎消息 -->
+                <div class="message system">
+                    <div class="message-content">
+                        你好！我是你的Life Coach AI。我会认真倾听你的问题，并给出有建设性的建议。让我们开始对话吧！
+                    </div>
+                </div>
+            </div>
+
+            <!-- 输入区域 -->
+            <div class="input-area">
+                <textarea id="userInput" placeholder="输入你的问题或想法..." rows="3"></textarea>
+                <button id="sendButton">发送</button>
+            </div>
+        </main>
+
+        <!-- 底部版权信息 -->
+        <footer class="footer">
+            <p>© 2024 Life Coach AI. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <!-- 页面交互脚本 -->
+    <script>
+        // 获取DOM元素
+        const chatMessages = document.getElementById('chatMessages');
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
+
+        // 存储对话历史
+        let messageHistory = [];
+
+        // 添加消息到聊天区域
+        function addMessage(content, isUser = false) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'ai'}`;
+            messageDiv.innerHTML = `<div class="message-content">${content}</div>`;
+            chatMessages.appendChild(messageDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        // 处理AI响应
+        async function handleAIResponse(messages) {
+            try {
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ messages })
+                });
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                // 创建AI回复的消息元素
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message ai';
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                messageDiv.appendChild(contentDiv);
+                chatMessages.appendChild(messageDiv);
+
+                let aiResponse = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value);
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.trim() === '' || line.trim() === 'data: [DONE]') continue;
+
+                        try {
+                            const jsonData = JSON.parse(line.replace('data: ', ''));
+                            if (jsonData.content) {
+                                aiResponse += jsonData.content;
+                                contentDiv.textContent = aiResponse;
+                                chatMessages.scrollTop = chatMessages.scrollHeight;
+                            }
+                        } catch (e) {
+                            console.error('解析响应数据出错:', e);
+                        }
+                    }
+                }
+
+                // 将AI回复添加到历史记录
+                messageHistory.push({ role: 'assistant', content: aiResponse });
+            } catch (error) {
+                console.error('请求出错:', error);
+                addMessage('抱歉，发生了错误，请稍后重试。', false);
+            }
+        }
+
+        // 发送消息
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            if (!message) return;
+
+            // 添加用户消息到界面
+            addMessage(message, true);
+
+            // 添加用户消息到历史记录
+            messageHistory.push({ role: 'user', content: message });
+
+            // 清空输入框
+            userInput.value = '';
+
+            // 发送请求到服务器
+            await handleAIResponse(messageHistory);
+        }
+
+        // 绑定事件
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
